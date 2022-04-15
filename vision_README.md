@@ -140,7 +140,7 @@ Here `$MODEL` is one of `regnet_x_400mf`, `regnet_x_800mf`, `regnet_x_1_6gf`, `r
 #### Medium models
 ```
 torchrun --nproc_per_node=8 train.py\
-     --model $MODEL --epochs 100 --batch-size 64 --wd 0.00005 --lr=0.4\
+     --model $MODEL --epochs 100 --batch-size 64 --wd 0.00005 --lr=0.4\    
      --lr-scheduler=cosineannealinglr --lr-warmup-method=linear\
      --lr-warmup-epochs=5 --lr-warmup-decay=0.1
 ```
