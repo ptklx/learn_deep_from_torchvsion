@@ -36,7 +36,7 @@ def train_one_epoch(model, criterion, optimizer, data_loader, device, epoch, arg
     model.train()
     metric_logger = utils.MetricLogger(delimiter="  ")
     metric_logger.add_meter("lr", utils.SmoothedValue(window_size=1, fmt="{value}"))
-    metric_logger.add_meter("img/s", utils.SmoothedValue(window_size=10, fmt="{value}"))
+    # metric_logger.add_meter("img/s", utils.SmoothedValue(window_size=10, fmt="{value}"))
 
     header = f"Epoch: [{epoch}]"
     for i, (image, target) in enumerate(metric_logger.log_every(data_loader, args.print_freq, header)):
@@ -71,8 +71,8 @@ def train_one_epoch(model, criterion, optimizer, data_loader, device, epoch, arg
         batch_size = image.shape[0]
         metric_logger.update(loss=loss.item(), lr=optimizer.param_groups[0]["lr"])
         metric_logger.meters["acc1"].update(acc1.item(), n=batch_size)
-        metric_logger.meters["acc5"].update(acc5.item(), n=batch_size)
-        metric_logger.meters["img/s"].update(batch_size / (time.time() - start_time))
+        # metric_logger.meters["acc5"].update(acc5.item(), n=batch_size)
+        # metric_logger.meters["img/s"].update(batch_size / (time.time() - start_time))
 
 
 def evaluate(model, criterion, data_loader, device, print_freq=100, log_suffix=""):
@@ -115,6 +115,7 @@ def evaluate(model, criterion, data_loader, device, print_freq=100, log_suffix="
     metric_logger.synchronize_between_processes()
 
     print(f"{header} Acc@1 {metric_logger.acc1.global_avg:.3f} Acc@5 {metric_logger.acc5.global_avg:.3f}")
+    # print(f"test:{metric_logger.acc1.global_avg:.3f}")
     return metric_logger.acc1.global_avg
 
 
@@ -191,7 +192,12 @@ def main(args):
     # model = my_models.models.__dict__[args.model](weights=args.weights, num_classes=num_classes)
     # model=BaseModel(args.model,args.weights,num_classes)
 
-    model =BaseModel.resnet18(num_classes=num_classes)
+    # model =BaseModel.resnet18(num_classes=num_classes)
+    if args.model=="mobilenetv3":
+        model = BaseModel.mobilenet_v3_large(num_classes=num_classes)
+    elif  args.model=="resnet18":
+        model = BaseModel.resnet18(num_classes=num_classes)
+
     #load pre train model
     load_weights= torch.load(args.weights, map_location=device)
     model.load_state_dict(load_weights)
@@ -300,15 +306,15 @@ def main(args):
         if scaler:
             scaler.load_state_dict(checkpoint["scaler"])
 
-    if args.test_only:
-        # We disable the cudnn benchmarking because it can noticeably affect the accuracy
-        torch.backends.cudnn.benchmark = False
-        torch.backends.cudnn.deterministic = True
-        if model_ema:
-            evaluate(model_ema, criterion, data_loader_test, device=device, log_suffix="EMA")
-        else:
-            evaluate(model, criterion, data_loader_test, device=device)
-        return
+    # if args.test_only:
+    #     # We disable the cudnn benchmarking because it can noticeably affect the accuracy
+    #     torch.backends.cudnn.benchmark = False
+    #     torch.backends.cudnn.deterministic = True
+    #     if model_ema:
+    #         evaluate(model_ema, criterion, data_loader_test, device=device, log_suffix="EMA")
+    #     else:
+    #         evaluate(model, criterion, data_loader_test, device=device)
+    #     return
 
     print("Start training")
     start_time = time.time()
@@ -318,9 +324,11 @@ def main(args):
             train_sampler.set_epoch(epoch)
         train_one_epoch(model, criterion, optimizer, data_loader, device, epoch, args, model_ema, scaler)
         lr_scheduler.step()
-        val_acc = evaluate(model, criterion, data_loader_test, device=device)
-        if model_ema:
-           val_acc = evaluate(model_ema, criterion, data_loader_test, device=device, log_suffix="EMA")
+        val_acc = evaluate(model, criterion, data_loader_test, device=device,print_freq=args.print_freq)
+        # print(f"val_acc1:{val_acc},best_acc1:{best_acc}")
+        # if model_ema:
+        #    val_acc = evaluate(model_ema, criterion, data_loader_test, device=device, log_suffix="EMA")
+
         if args.output_dir:
             checkpoint = {
                 "model": model_without_ddp.state_dict(),
@@ -333,8 +341,9 @@ def main(args):
                 checkpoint["model_ema"] = model_ema.state_dict()
             if scaler:
                 checkpoint["scaler"] = scaler.state_dict()
+            print(f"val_acc:{val_acc:.3f},best_acc:{best_acc:.3f}")
             if val_acc > best_acc:
-                best_acc =val_acc
+                best_acc = val_acc
                 utils.save_on_master(model.state_dict(), os.path.join(args.output_dir, f"model_{epoch}_{best_acc:.3f}.pth"))
 
             if epoch%20==0:
@@ -349,26 +358,32 @@ def main(args):
 def get_args_parser(add_help=True):
     if winNolinux:
         img_folder = r"Z:\data\egg_products\dirt\single_egg\train"
-        weights_folder=r"Z:\code\office-parameter\resnet\resnet_general_1.pth"  #
+        # weights_folder=r"Z:\code\office-parameter\resnet\resnet_general_1.pth"  #
+        weights_folder=r"Z:\code\office-parameter\resnet\mobilenetv3_general_1.pth"
     else:
         img_folder = "/home/pengtao/data/egg_products/dirt/single_egg/train"
-        weights_folder="/home/pengtao/code/office-parameter/resnet/resnet_general_1.pth"
+        #weights_folder="/home/pengtao/code/office-parameter/resnet/resnet_general_1.pth"
+        weights_folder="/home/pengtao/code/office-parameter/resnet/mobilenetv3_general_1.pth"
+
     import argparse
     parser = argparse.ArgumentParser(description="PyTorch Classification Training", add_help=add_help)
 
     parser.add_argument("--data-path", default=img_folder, type=str, help="dataset path")
-    parser.add_argument("--model", default="resnet18", type=str, help="model name")
+    parser.add_argument("--model", default="mobilenetv3", type=str, help="model name")
     parser.add_argument("--weights", default=weights_folder, type=str, help="the weights enum name to load")
+    ###########outdir
+    parser.add_argument("--output-dir", default="./weight/mobilenet", type=str, help="path to save outputs")
+
 
     parser.add_argument("--device", default="cuda", type=str, help="device (Use cuda or cpu Default: cuda)")
     parser.add_argument(
-        "-b", "--batch-size", default=16, type=int, help="images per gpu, the total batch size is $NGPU x batch_size"
+        "-b", "--batch-size", default=8, type=int, help="images per gpu, the total batch size is $NGPU x batch_size"
     )
-    parser.add_argument("--epochs", default=520, type=int, metavar="N", help="number of total epochs to run")
+    parser.add_argument("--epochs", default=800, type=int, metavar="N", help="number of total epochs to run")
     parser.add_argument(
-        "-j", "--workers", default=6, type=int, metavar="N", help="number of data loading workers (default: 16)"
+        "-j", "--workers", default=1, type=int, metavar="N", help="number of data loading workers (default: 16)"
     )
-    parser.add_argument("--opt", default="sgd", type=str, help="optimizer")
+    parser.add_argument("--opt", default="sgd", type=str, help="optimizer")  #SGD, RMSprop and AdamW
     parser.add_argument("--lr", default=0.1, type=float, help="initial learning rate")
     parser.add_argument("--momentum", default=0.9, type=float, metavar="M", help="momentum")
     parser.add_argument(
@@ -401,7 +416,8 @@ def get_args_parser(add_help=True):
         "--label-smoothing", default=0.0, type=float, help="label smoothing (default: 0.0)", dest="label_smoothing")
     parser.add_argument("--mixup-alpha", default=0.0, type=float, help="mixup alpha (default: 0.0)")
     parser.add_argument("--cutmix-alpha", default=0.0, type=float, help="cutmix alpha (default: 0.0)")
-    parser.add_argument("--lr-scheduler", default="steplr", type=str, help="the lr scheduler (default: steplr)")
+    #StepLR, CosineAnnealingLR and ExponentialLR
+    parser.add_argument("--lr-scheduler", default="cosineannealinglr", type=str, help="the lr scheduler (default: steplr)") 
     parser.add_argument("--lr-warmup-epochs", default=0, type=int, help="the number of epochs to warmup (default: 0)")
     parser.add_argument(
         "--lr-warmup-method", default="constant", type=str, help="the warmup method (default: constant)"
@@ -409,9 +425,8 @@ def get_args_parser(add_help=True):
     parser.add_argument("--lr-warmup-decay", default=0.01, type=float, help="the decay for lr")
     parser.add_argument("--lr-step-size", default=30, type=int, help="decrease lr every step-size epochs")
     parser.add_argument("--lr-gamma", default=0.1, type=float, help="decrease lr by a factor of lr-gamma")
-    parser.add_argument("--print-freq", default=10, type=int, help="print frequency")
-    ###########outdir
-    parser.add_argument("--output-dir", default="./weight", type=str, help="path to save outputs")
+    parser.add_argument("--print-freq", default=15, type=int, help="print frequency")
+  
 
     parser.add_argument("--resume", default="", type=str, help="path of checkpoint")
     parser.add_argument("--start-epoch", default=0, type=int, metavar="N", help="start epoch")
@@ -478,7 +493,6 @@ def get_args_parser(add_help=True):
         "--ra-reps", default=3, type=int, help="number of repetitions for Repeated Augmentation (default: 3)"
     )
     
-
     return parser
 
 

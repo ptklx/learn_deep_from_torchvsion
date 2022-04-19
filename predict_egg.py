@@ -19,6 +19,10 @@ import cv2
 # from models.base_model import BaseModel
 from torchvision_my import models as BaseModel
 
+
+mean=(0.485, 0.456, 0.406)
+std=(0.229, 0.224, 0.225)
+
 class img_classifiction():
     def __init__(self,args) -> None:
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -36,18 +40,24 @@ class img_classifiction():
         #         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])   #mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
         #     ]
         # )
+      
+             
         self.data_transform =transforms.Compose([
-                            #    transforms.Resize([224,224]),
-                                transforms.Resize([256,256]),
-                                transforms.CenterCrop(224),
+                               transforms.Resize([224,224]),
+                                # transforms.Resize([256,256]),
+                                # transforms.CenterCrop(224),
                                 transforms.ToTensor(),
                                 transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
 
         # self.model = BaseModel(name=args.model_name, num_classes=args.num_classes).to(self.device)
-        self.model = BaseModel.resnet18(num_classes=args.num_classes).to(self.device)
+        if args.model_name=="mobilenetv3":
+            self.model = BaseModel.mobilenet_v3_large(num_classes=args.num_classes).to(self.device)
+        elif  args.model_name=="resnet18":
+            self.model = BaseModel.resnet18(num_classes=args.num_classes).to(self.device)
+
         checkpoint_my = torch.load(args.model_weight_path, map_location=self.device)
-        # self.model.load_state_dict(checkpoint_my)
-        self.model.load_state_dict(checkpoint_my["model"])
+        self.model.load_state_dict(checkpoint_my)
+        # self.model.load_state_dict(checkpoint_my["model"])
         self.model.eval()
 
     def predict(self,image):
@@ -57,17 +67,25 @@ class img_classifiction():
         # img = torch.unsqueeze(img, dim=0)
         # imgd = self.letterbox(self.img, new_shape=(self.imgsz,self.imgsz))[0]
         # r_image = cv2.resize(image, (224,224), interpolation=cv2.INTER_LINEAR)
-        if False:
-            imgd = image[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
-            #######
+        if True:
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            imgd = np.array(image,dtype = np.float32) / 255.0
+            # image = cv2.resize(image, (224,224), interpolation=cv2.INTER_LINEAR)
+            imgd = imgd- np.array(mean)
+            imgd =imgd/np.array(std)
+            imgd = imgd.transpose(2,0,1)
             imgd = np.ascontiguousarray(imgd)
             imgd = torch.from_numpy(imgd).to(self.device)
-            imgd = imgd.float()  #imgd.half() if self.half else imgd.float()  # uint8 to fp16/32
-            imgd /= 255.0  # 0 - 255 to 0.0 - 1.0
-            # imgd =transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])(imgd)  #0 - 255  to -1 - 1
+            imgd= imgd.float()
+             #imgd.half() if self.half else imgd.float()  # uint8 to fp16/32
+            if imgd.ndimension() == 3:
+                imgd = imgd.unsqueeze(0)
         else:
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             imgd =Image.fromarray(np.uint8(image))
             imgd = self.data_transform(imgd).to(self.device)
+            if imgd.ndimension() == 3:
+                imgd = imgd.unsqueeze(0)
         # imgd =Image.fromarray(np.uint8(image))
         # imgd = transforms.ToTensor()(imgd).to(self.device)  #归一化
         # imgd =transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])(imgd)  #0 - 255  to -1 - 1
@@ -75,10 +93,7 @@ class img_classifiction():
         # imgd =Image.fromarray(np.uint8(image))
         # imgd= self.data_transform(imgd)
         # imgd = imgd.to(self.device)
-
-
-        if imgd.ndimension() == 3:
-            imgd = imgd.unsqueeze(0)
+        
         with torch.no_grad():
             output = torch.squeeze(self.model(imgd)).cpu()
             predict = torch.softmax(output, dim=0)
@@ -132,6 +147,7 @@ def main(args,class_indict):
         # img_ori = np.array(img) # to opencv 
         # img_ori = cv2.cvtColor(img_ori, cv2.COLOR_RGB2BGR)
         img_ori = cv2.imread(img_file)
+        img_ori = cv2.resize(img_ori, (224,224))
         # img_Image = Image.fromarray(np.uint8(img))  #to Image
         predict,predict_cla = classifiction_model.predict(img_ori)
 
@@ -156,8 +172,12 @@ if __name__ == '__main__':
     class_name = ["clean_egg","dirt_egg","leak_egg"]
     num = len(class_name)
     # model_path =r"Z:\code\egg_products\dirt_egg_recognition\CV\Image_Classification\weights\resnet.pth"
-    model_path =r"Z:\code\egg_products\dirt_egg_recognition\classification_egg\weight\model_519.pth"
+    # model_path =r"Z:\code\egg_products\dirt_egg_recognition\classification_egg\weight\model_23_83.972.pth"
+    model_path =r"Z:\code\egg_products\dirt_egg_recognition\classification_egg\weight\mobilenet\5\model_699_99.607.pth"
     img_path =r"Z:\data\egg_products\dirt\single_egg\train\leak_egg"
+    # img_path =r"Z:\data\egg_products\dirt\single_egg\train\dirt_egg"
+    # img_path =r"Z:\data\egg_products\dirt\single_egg\train\clean_egg"
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--img_path', type=str, default=img_path)
     parser.add_argument('--real_label', type=str, default=class_name[0])
