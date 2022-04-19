@@ -377,7 +377,7 @@ def get_args_parser(add_help=True):
 
     parser.add_argument("--device", default="cuda", type=str, help="device (Use cuda or cpu Default: cuda)")
     parser.add_argument(
-        "-b", "--batch-size", default=8, type=int, help="images per gpu, the total batch size is $NGPU x batch_size"
+        "-b", "--batch-size", default=32, type=int, help="images per gpu, the total batch size is $NGPU x batch_size"
     )
     parser.add_argument("--epochs", default=800, type=int, metavar="N", help="number of total epochs to run")
     parser.add_argument(
@@ -417,7 +417,7 @@ def get_args_parser(add_help=True):
     parser.add_argument("--mixup-alpha", default=0.0, type=float, help="mixup alpha (default: 0.0)")
     parser.add_argument("--cutmix-alpha", default=0.0, type=float, help="cutmix alpha (default: 0.0)")
     #StepLR, CosineAnnealingLR and ExponentialLR
-    parser.add_argument("--lr-scheduler", default="cosineannealinglr", type=str, help="the lr scheduler (default: steplr)") 
+    parser.add_argument("--lr-scheduler", default="steplr", type=str, help="the lr scheduler (default: steplr)") 
     parser.add_argument("--lr-warmup-epochs", default=0, type=int, help="the number of epochs to warmup (default: 0)")
     parser.add_argument(
         "--lr-warmup-method", default="constant", type=str, help="the warmup method (default: constant)"
